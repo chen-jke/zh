@@ -53,7 +53,8 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .bar canvas{position:absolute;inset:0;width:100%;height:100%}
 .bpos{position:absolute;top:4px;bottom:4px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--ink);pointer-events:none}
 .tip{position:absolute;bottom:100%;transform:translateX(-50%);background:var(--solid);color:var(--solid-ink);font-size:12px;font-weight:600;padding:3px 7px;border-radius:6px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s}
-.barwrap:hover .tip,.barwrap.drag .tip{opacity:1}
+.barwrap.drag .tip{opacity:1}
+@media (hover:hover){.barwrap:hover .tip{opacity:1}}
 
 /* stage */
 .stage{flex:1;display:flex;align-items:center;justify-content:center;padding:8px 16px;min-height:0}
@@ -103,7 +104,31 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .fld input[type=range]{accent-color:var(--solid);width:100%}
 .status{font-size:13px}
 .btn.primary{background:var(--solid);color:var(--solid-ink);border-color:var(--solid)}
-@media (max-width:420px){.controls{gap:6px;padding:8px 10px 12px}.k{padding:10px 2px;font-size:11px}.k kbd{font-size:16px}.stats{gap:12px}}
+.tools{display:flex;align-items:center;gap:10px}
+.mob{display:none!important}
+.k svg{width:22px;height:22px}
+@media (max-width:640px){
+  .head{flex-direction:column;align-items:stretch;gap:10px}
+  .tools{gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .tools::-webkit-scrollbar{display:none}
+  .tools .seg button{padding:6px 9px;font-size:12px}
+  .tools .icon{padding:6px 8px;font-size:12px;gap:5px;white-space:nowrap;flex-shrink:0}
+  .tools .seg{flex-shrink:0}
+  .stats{gap:12px}
+  .desk{display:none!important}
+  .mob{display:flex!important}
+  .k kbd{display:none}
+  .controls{gap:6px;padding:8px 10px 12px}
+  .k{padding:16px 2px;font-size:13px;justify-content:center}
+  .k span{color:var(--ink);font-weight:600}
+  .k.prev,.k.next{align-items:center;justify-content:center}
+  .controls{grid-template-columns:repeat(4,1fr) 52px 52px}
+  .k.prev{order:5} .k.next{order:6}
+  .k.next{background:var(--btn);border-color:var(--line)}
+  .k.next .arrow{color:var(--ink)}
+  .k .emo{font-size:22px;line-height:1;justify-content:center}
+}
+@media (max-width:390px){.tools .icon svg{display:none}.tools .icon{padding:6px 9px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -111,6 +136,7 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 <header class="top">
   <div class="head">
     <h1 class="title">Top multi-characters</h1>
+    <div class="tools">
     <div class="seg" role="group" aria-label="Which words to show">
       <button id="mAll" aria-pressed="true">All</button>
       <button id="mPend" aria-pressed="false">To review</button>
@@ -122,6 +148,7 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
     <button class="icon" id="reset">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>Reset
     </button>
+    </div>
   </div>
   <div class="stats">
     <div class="pos" id="pos"></div>
@@ -145,11 +172,12 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 </main>
 
 <nav class="controls">
-  <button class="k" data-k="1"><kbd>1</kbd><span>Wrong</span></button>
-  <button class="k" data-k="2"><kbd>2</kbd><span>Correct</span></button>
-  <button class="k" data-k="3"><kbd>3</kbd><span>Listen</span></button>
-  <button class="k" data-k="4"><kbd>4</kbd><span>Show</span></button>
-  <button class="k next" data-k="next"><kbd>␣</kbd><span>Next</span></button>
+  <button class="k prev mob" data-k="prev" aria-label="Previous word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button class="k" data-k="1" aria-label="Wrong"><kbd>1</kbd><span class="desk">Wrong</span><span class="mob emo">❌</span></button>
+  <button class="k" data-k="2" aria-label="Correct"><kbd>2</kbd><span class="desk">Correct</span><span class="mob emo">✅</span></button>
+  <button class="k" data-k="3" aria-label="Listen"><kbd>3</kbd><span class="desk">Listen</span><span class="mob emo">🔊</span></button>
+  <button class="k" data-k="4" aria-label="Show"><kbd>4</kbd><span class="desk">Show</span><span class="mob emo">👁️</span></button>
+  <button class="k next" data-k="next" aria-label="Next word"><kbd class="desk">␣</kbd><span class="desk">Next</span><span class="mob arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></button>
 </nav>
 
 <div class="overlay" id="voiceSheet">
@@ -407,6 +435,7 @@ function act(k){
   if (k==='1') mark('ko'); else if (k==='2') mark('ok');
   else if (k==='3') say(); else if (k==='4') reveal(true);
   else if (k==='next') next();
+  else if (k==='prev') prev();
 }
 document.addEventListener('keydown', e => {
   if (document.querySelector('.overlay.on')){ if (e.key==='Escape') closeAll(); return; }
@@ -432,7 +461,7 @@ let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTime
 
 applyTheme();
 render();
-if (idx() !== undefined) $('hint').textContent = 'Press 3 to hear the word';
+if (idx() !== undefined) $('hint').textContent = matchMedia('(max-width:640px)').matches ? 'Tap Listen to hear the word' : 'Press 3 to hear the word';
 })();
 </script>
 </body>
