@@ -133,6 +133,12 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
   .k .emo{font-size:22px;line-height:1;justify-content:center}
 }
 @media (max-width:390px){.tools .icon svg{flex-shrink:0}.tools .icon{padding:6px 9px}}
+.ink{position:absolute;inset:0;width:100%;height:100%;z-index:2;display:none;touch-action:none;cursor:crosshair;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.clr{display:none;align-items:center;gap:6px;border:1px solid var(--line);background:transparent;border-radius:10px;
+  padding:7px 14px;font-size:13px;font-weight:600;color:var(--soft);margin-top:-8px}
+.clr svg{width:15px;height:15px}
+@media (max-width:640px),(pointer:coarse){.ink{display:block}.clr{display:flex}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -170,6 +176,7 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 <main class="stage">
   <section class="card hidden" id="card" aria-live="polite">
     <div class="chars" id="chars"></div>
+    <button class="clr" id="clearInk" aria-label="Clear writing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H9L4 15a2 2 0 0 1 0-2.8L13.2 3a2 2 0 0 1 2.8 0l4 4a2 2 0 0 1 0 2.8L11 19"/><path d="M8 11l5 5"/></svg>Clear</button>
     <div class="sandhi" id="sandhi" hidden></div>
     <ul class="meaning" id="meaning"></ul>
     <div class="hint" id="hint"></div>
@@ -258,6 +265,7 @@ function applyTheme(){
   gridBg = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cg stroke='${g}' stroke-opacity='.3' stroke-width='.6' fill='none' vector-effect='non-scaling-stroke'%3E%3Crect x='.5' y='.5' width='99' height='99'/%3E%3Cline x1='50' y1='0' x2='50' y2='100' stroke-dasharray='3 3'/%3E%3Cline x1='0' y1='50' x2='100' y2='50' stroke-dasharray='3 3'/%3E%3Cline x1='0' y1='0' x2='100' y2='100' stroke-dasharray='2 4'/%3E%3Cline x1='100' y1='0' x2='0' y2='100' stroke-dasharray='2 4'/%3E%3C/g%3E%3C/svg%3E")`;
   document.querySelectorAll('.box').forEach(b => b.style.backgroundImage = gridBg);
   writers.forEach((wr,k) => { wr.updateColor('outlineColor', css('--outline')); wr.updateColor('strokeColor', css('--t'+tones[k])); });
+  inkRedraws.forEach(f => f());
   drawBar();
 }
 let gridBg = '';
@@ -308,13 +316,65 @@ $('vRate').oninput = e => { S.voice.rate = parseFloat(e.target.value); $('vRateL
 $('vTest').onclick = () => speakTTS('你好，我们走吧');
 $('vClose').onclick = () => closeAll();
 
+/* ---------- handwriting (finger / stylus) ---------- */
+const DRAW = matchMedia('(max-width:640px), (pointer:coarse)');
+let ink = [], inkRedraws = [];
+const inkColor = () => document.documentElement.dataset.theme === 'dark' ? '#fff' : '#000';   // per box: list of strokes, points normalised 0–1 so they survive a resize
+function setupInk(b, k, size){
+  const c = document.createElement('canvas'); c.className = 'ink';
+  const dpr = window.devicePixelRatio || 1;
+  c.width = c.height = Math.round(size*dpr);
+  b.append(c);
+  const x = c.getContext('2d');
+  x.scale(dpr, dpr); x.lineCap = 'round'; x.lineJoin = 'round';
+  const strokes = ink[k] || (ink[k] = []);
+  const base = Math.max(3, size*0.04);
+  const seg = (a, p) => {
+    x.lineWidth = base*(a.w + p.w)/2;
+    x.beginPath(); x.moveTo(a.x*size, a.y*size); x.lineTo(p.x*size, p.y*size); x.stroke();
+  };
+  const dot = p => { x.beginPath(); x.arc(p.x*size, p.y*size, base*p.w/2, 0, Math.PI*2); x.fill(); };
+  const redraw = () => {
+    x.clearRect(0, 0, size, size);
+    x.strokeStyle = x.fillStyle = inkColor();
+    strokes.forEach(s => { dot(s[0]); for (let n = 1; n < s.length; n++) seg(s[n-1], s[n]); });
+  };
+  inkRedraws.push(redraw); redraw();
+  const pt = e => {
+    const r = c.getBoundingClientRect();
+    const w = e.pointerType === 'pen' && e.pressure ? 0.55 + e.pressure*0.9 : 1;
+    return { x:(e.clientX - r.left)/r.width, y:(e.clientY - r.top)/r.height, w };
+  };
+  let cur = null, pid = null;
+  c.addEventListener('pointerdown', e => {
+    if (!DRAW.matches || pid !== null || e.button > 0) return;
+    e.preventDefault(); pid = e.pointerId; c.setPointerCapture(pid);
+    cur = [pt(e)]; strokes.push(cur); dot(cur[0]);
+  });
+  c.addEventListener('pointermove', e => {
+    if (e.pointerId !== pid || !cur) return;
+    e.preventDefault();
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+    (evs.length ? evs : [e]).forEach(ev => { const p = pt(ev); seg(cur[cur.length-1], p); cur.push(p); });
+  });
+  const end = e => { if (e.pointerId === pid){ cur = null; pid = null; } };
+  c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+}
+function clearInk(){
+  ink.forEach(s => s && (s.length = 0));
+  document.querySelectorAll('.ink').forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
+}
+$('clearInk').onclick = e => { clearInk(); e.currentTarget.blur(); };
+
 /* ---------- render ---------- */
 function cellSize(n){
   const avail = Math.min(window.innerWidth, 760) - 64 - (n-1)*10;
-  const byH = window.innerHeight - 420;
+  const byH = window.innerHeight - (DRAW.matches ? 470 : 420);
   return Math.max(70, Math.min(220, Math.floor(avail/n), byH));
 }
-function render(){
+function render(keepInk = false){
+  if (!keepInk) ink = [];
+  inkRedraws = [];
   animToken++; revealed = false;
   const card = $('card'); card.className = 'card hidden';
   const box = $('chars'); box.innerHTML = ''; writers = []; tones = [];
@@ -339,6 +399,7 @@ function render(){
       strokeAnimationSpeed:1.1, delayBetweenStrokes:120, renderer:'svg',
       charDataLoader:(c, done) => done(DATA.chars[c])
     }));
+    setupInk(b, k, size);
   });
   const parts = (w.m || '—').split(' • ').map(s => s.trim()).filter(Boolean);
   const m = $('meaning'); m.innerHTML = ''; m.scrollTop = 0;
@@ -475,7 +536,7 @@ $('doReset').onclick = () => { S = { mode:'all', posAll:0, posPend:0, pend:[], r
 $('endPend').onclick = () => setMode('pend');
 $('endClose').onclick = closeAll;
 document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if (e.target===o) closeAll(); }));
-let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const r = revealed; render(); if (r) reveal(false); }, 200); });
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const r = revealed; render(true); if (r) reveal(false); }, 200); });
 
 applyTheme();
 render();
