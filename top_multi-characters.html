@@ -83,15 +83,17 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .sandhi{max-width:min(46ch,100%);margin-top:-12px;font-size:13px;line-height:1.45;color:var(--soft);text-align:center;transition:opacity .2s}
 .sandhi b{font-weight:700}
 .hidden .sandhi{opacity:0}
+.card.instant .py,.card.instant .sandhi{transition:none}
 .hint{font-size:13px;color:var(--mute);min-height:1.2em;text-align:center}
 
 /* controls: monochrome */
-.controls{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:10px 14px 16px;max-width:760px;width:100%;margin:0 auto}
+.controls{display:grid;grid-template-columns:repeat(4,1fr) 72px 72px;gap:8px;padding:10px 14px 16px;max-width:760px;width:100%;margin:0 auto}
 .k{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px;border-radius:14px;border:1px solid var(--line);background:var(--btn);font-size:13px;font-weight:600;color:var(--ink)}
-.k kbd{font-family:inherit;font-size:18px;font-weight:700;color:var(--ink)}
-.k span{color:var(--mute);font-weight:500}
-.k.next{background:var(--solid);border-color:var(--solid)}
-.k.next kbd,.k.next span{color:var(--solid-ink)}
+.k kbd{font-family:inherit;font-size:13px;font-weight:500;color:var(--mute)}
+.k .emo{font-size:22px;line-height:1}
+.k.prev,.k.next{align-items:center;justify-content:center;color:var(--ink)}
+.k.prev{order:5} .k.next{order:6}
+.k .arrow{display:flex}
 .k:active{transform:scale(.97)}
 
 /* overlays */
@@ -184,12 +186,12 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 </main>
 
 <nav class="controls">
-  <button class="k prev mob" data-k="prev" aria-label="Previous word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
-  <button class="k" data-k="1" aria-label="Wrong"><kbd>1</kbd><span class="desk">Wrong</span><span class="mob emo">❌</span></button>
-  <button class="k" data-k="2" aria-label="Correct"><kbd>2</kbd><span class="desk">Correct</span><span class="mob emo">✅</span></button>
-  <button class="k" data-k="3" aria-label="Listen"><kbd>3</kbd><span class="desk">Listen</span><span class="mob emo">🔊</span></button>
-  <button class="k" data-k="4" aria-label="Show"><kbd>4</kbd><span class="desk">Show</span><span class="mob emo">👁️</span></button>
-  <button class="k next" data-k="next" aria-label="Next word"><kbd class="desk">␣</kbd><span class="desk">Next</span><span class="mob arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></button>
+  <button class="k prev" data-k="prev" aria-label="Previous word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button class="k" data-k="1" aria-label="Wrong"><span class="emo">❌</span><kbd>1</kbd></button>
+  <button class="k" data-k="2" aria-label="Correct"><span class="emo">✅</span><kbd>2</kbd></button>
+  <button class="k" data-k="3" aria-label="Listen"><span class="emo">🔊</span><kbd>3</kbd></button>
+  <button class="k" data-k="4" aria-label="Show"><span class="emo">👁️</span><kbd>4</kbd></button>
+  <button class="k next" data-k="next" aria-label="Next word"><span class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></button>
 </nav>
 
 <div class="overlay" id="voiceSheet">
@@ -426,11 +428,17 @@ async function reveal(animate = true){
   if (!writers.length) return;
   const token = ++animToken;
   revealed = true;
-  $('card').classList.remove('hidden');
+  $('card').classList.remove('instant','hidden');
   writers.forEach(wr => wr.showOutline());
   if (!animate){ writers.forEach(wr => wr.showCharacter()); return; }
   writers.forEach(wr => wr.hideCharacter());
   for (const wr of writers){ if (token !== animToken) return; await wr.animateCharacter(); }
+}
+function conceal(){
+  if (!writers.length) return;
+  animToken++; revealed = false;
+  $('card').classList.add('instant','hidden');
+  writers.forEach(wr => { wr.hideCharacter({duration:0}); wr.hideOutline({duration:0}); });
 }
 function mark(m){
   const i = idx(); if (i === undefined) return;
@@ -512,7 +520,7 @@ function closeAll(){ document.querySelectorAll('.overlay').forEach(o => o.classL
 /* ---------- input ---------- */
 function act(k){
   if (k==='1') mark('ko'); else if (k==='2') mark('ok');
-  else if (k==='3') say(); else if (k==='4') reveal(true);
+  else if (k==='3') say(); else if (k==='4') (revealed ? conceal() : reveal(true));
   else if (k==='next') next();
   else if (k==='prev') prev();
 }
