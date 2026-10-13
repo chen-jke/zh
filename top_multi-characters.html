@@ -58,7 +58,7 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 
 /* stage */
 .stage{flex:1;display:flex;align-items:center;justify-content:center;padding:8px 16px;min-height:0}
-.card{width:100%;max-width:760px;display:flex;flex-direction:column;align-items:center;gap:22px;padding:26px 16px 30px;
+.card{position:relative;width:100%;max-width:760px;display:flex;flex-direction:column;align-items:center;gap:22px;padding:26px 16px 30px;
   border-radius:22px;background:var(--panel);border:2px solid transparent;transition:border-color .2s,background .2s}
 .card.ok{border-color:var(--ok)} .card.ko{border-color:var(--ko)}
 .chars{display:flex;gap:10px;justify-content:center}
@@ -137,8 +137,9 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 @media (max-width:390px){.tools .icon svg{flex-shrink:0}.tools .icon{padding:6px 9px}}
 .ink{position:absolute;inset:0;width:100%;height:100%;z-index:2;display:none;touch-action:none;cursor:crosshair;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.card .ink{border-radius:20px}
 .clr{display:none;align-items:center;gap:6px;border:1px solid var(--line);background:transparent;border-radius:10px;
-  padding:7px 14px;font-size:13px;font-weight:600;color:var(--soft);margin-top:-8px}
+  padding:7px 14px;font-size:13px;font-weight:600;color:var(--soft);margin-top:-8px;position:relative;z-index:3}
 .clr svg{width:15px;height:15px}
 @media (max-width:640px),(pointer:coarse){.ink{display:block}.clr{display:flex}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -320,52 +321,55 @@ $('vClose').onclick = () => closeAll();
 
 /* ---------- handwriting (finger / stylus) ---------- */
 const DRAW = matchMedia('(max-width:640px), (pointer:coarse)');
-let ink = [], inkRedraws = [];
-const inkColor = () => document.documentElement.dataset.theme === 'dark' ? '#fff' : '#000';   // per box: list of strokes, points normalised 0–1 so they survive a resize
-function setupInk(b, k, size){
-  const c = document.createElement('canvas'); c.className = 'ink';
-  const dpr = window.devicePixelRatio || 1;
-  c.width = c.height = Math.round(size*dpr);
-  b.append(c);
-  const x = c.getContext('2d');
-  x.scale(dpr, dpr); x.lineCap = 'round'; x.lineJoin = 'round';
-  const strokes = ink[k] || (ink[k] = []);
-  const base = Math.max(3, size*0.04);
-  const seg = (a, p) => {
-    x.lineWidth = base*(a.w + p.w)/2;
-    x.beginPath(); x.moveTo(a.x*size, a.y*size); x.lineTo(p.x*size, p.y*size); x.stroke();
-  };
-  const dot = p => { x.beginPath(); x.arc(p.x*size, p.y*size, base*p.w/2, 0, Math.PI*2); x.fill(); };
-  const redraw = () => {
-    x.clearRect(0, 0, size, size);
-    x.strokeStyle = x.fillStyle = inkColor();
-    strokes.forEach(s => { dot(s[0]); for (let n = 1; n < s.length; n++) seg(s[n-1], s[n]); });
-  };
-  inkRedraws.push(redraw); redraw();
+let inkRedraws = [], inkBase = 4;
+const inkColor = () => document.documentElement.dataset.theme === 'dark' ? '#fff' : '#000';
+// one canvas over the whole card; points normalised 0–1 to the card so they survive a resize
+let strokes = [];
+const inkC = document.createElement('canvas'); inkC.className = 'ink';
+$('card').append(inkC);
+const ix = inkC.getContext('2d');
+let iw = 1, ih = 1;
+const seg = (a, p) => {
+  ix.lineWidth = inkBase*(a.w + p.w)/2;
+  ix.beginPath(); ix.moveTo(a.x*iw, a.y*ih); ix.lineTo(p.x*iw, p.y*ih); ix.stroke();
+};
+const dot = p => { ix.beginPath(); ix.arc(p.x*iw, p.y*ih, inkBase*p.w/2, 0, Math.PI*2); ix.fill(); };
+function redrawInk(){
+  ix.setTransform(1,0,0,1,0,0); ix.clearRect(0, 0, inkC.width, inkC.height);
+  const dpr = window.devicePixelRatio || 1; ix.scale(dpr, dpr);
+  ix.lineCap = 'round'; ix.lineJoin = 'round';
+  ix.strokeStyle = ix.fillStyle = inkColor();
+  strokes.forEach(s => { dot(s[0]); for (let n = 1; n < s.length; n++) seg(s[n-1], s[n]); });
+}
+function sizeInk(){
+  const card = $('card'), dpr = window.devicePixelRatio || 1;
+  iw = Math.max(1, card.clientWidth); ih = Math.max(1, card.clientHeight);
+  inkC.width = Math.round(iw*dpr); inkC.height = Math.round(ih*dpr);
+  redrawInk();
+}
+if ('ResizeObserver' in window) new ResizeObserver(sizeInk).observe($('card'));
+{
   const pt = e => {
-    const r = c.getBoundingClientRect();
+    const r = inkC.getBoundingClientRect();
     const w = e.pointerType === 'pen' && e.pressure ? 0.55 + e.pressure*0.9 : 1;
     return { x:(e.clientX - r.left)/r.width, y:(e.clientY - r.top)/r.height, w };
   };
   let cur = null, pid = null;
-  c.addEventListener('pointerdown', e => {
+  inkC.addEventListener('pointerdown', e => {
     if (!DRAW.matches || pid !== null || e.button > 0) return;
-    e.preventDefault(); pid = e.pointerId; c.setPointerCapture(pid);
+    e.preventDefault(); pid = e.pointerId; inkC.setPointerCapture(pid);
     cur = [pt(e)]; strokes.push(cur); dot(cur[0]);
   });
-  c.addEventListener('pointermove', e => {
+  inkC.addEventListener('pointermove', e => {
     if (e.pointerId !== pid || !cur) return;
     e.preventDefault();
     const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
     (evs.length ? evs : [e]).forEach(ev => { const p = pt(ev); seg(cur[cur.length-1], p); cur.push(p); });
   });
   const end = e => { if (e.pointerId === pid){ cur = null; pid = null; } };
-  c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+  inkC.addEventListener('pointerup', end); inkC.addEventListener('pointercancel', end);
 }
-function clearInk(){
-  ink.forEach(s => s && (s.length = 0));
-  document.querySelectorAll('.ink').forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-}
+function clearInk(){ strokes = []; redrawInk(); }
 $('clearInk').onclick = e => { clearInk(); e.currentTarget.blur(); };
 
 /* ---------- render ---------- */
@@ -375,8 +379,8 @@ function cellSize(n){
   return Math.max(70, Math.min(220, Math.floor(avail/n), byH));
 }
 function render(keepInk = false){
-  if (!keepInk) ink = [];
-  inkRedraws = [];
+  if (!keepInk) strokes = [];
+  inkRedraws = [redrawInk];
   animToken++; revealed = false;
   const card = $('card'); card.className = 'card hidden';
   const box = $('chars'); box.innerHTML = ''; writers = []; tones = [];
@@ -401,7 +405,6 @@ function render(keepInk = false){
       strokeAnimationSpeed:1.1, delayBetweenStrokes:120, renderer:'svg',
       charDataLoader:(c, done) => done(DATA.chars[c])
     }));
-    setupInk(b, k, size);
   });
   const parts = (w.m || '—').split(' • ').map(s => s.trim()).filter(Boolean);
   const m = $('meaning'); m.innerHTML = ''; m.scrollTop = 0;
@@ -422,6 +425,8 @@ function render(keepInk = false){
   }
   $('hint').textContent = '';
   if (S.res[i]) card.classList.add(S.res[i]);
+  inkBase = Math.max(3, size*0.04);
+  sizeInk();
   progress();
 }
 async function reveal(animate = true){
