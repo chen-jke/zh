@@ -387,7 +387,6 @@ function render(keepInk = false){
   const i = idx();
   if (i === undefined){
     $('sandhi').hidden = true; $('meaning').innerHTML = '<li>Nothing left to review.</li>'; $('meaning').classList.add('single');
-    $('hint').textContent = 'Switch to “All” to keep practising.';
     progress(); return;
   }
   const w = W[i], size = cellSize(w.w.length);
@@ -553,7 +552,6 @@ let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTime
 
 applyTheme();
 render();
-if (idx() !== undefined) $('hint').textContent = matchMedia('(max-width:640px)').matches ? 'Tap Listen to hear the word' : 'Press 3 to hear the word';
 })();
 </script>
 </body>
