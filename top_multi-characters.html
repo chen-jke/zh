@@ -142,6 +142,21 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
   padding:7px 14px;font-size:13px;font-weight:600;color:var(--soft);margin-top:-8px;position:relative;z-index:3}
 .clr svg{width:15px;height:15px}
 @media (max-width:640px),(pointer:coarse){.ink{display:block}.clr{display:flex}}
+/* translation scroll arrows: replace the scrollbar in draw mode (the ink layer sits on top of it) */
+.mwrap{display:flex;align-items:center;gap:10px;max-width:min(60ch,100%);min-width:0}
+.mwrap .meaning{flex:0 1 auto;min-width:0}
+.mnav{display:none;flex-direction:column;gap:6px;position:relative;z-index:3;flex-shrink:0}
+.mnav button{display:flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border-radius:10px;
+  border:1px solid var(--line);background:transparent;color:var(--soft);transition:opacity .15s}
+.mnav button svg{width:16px;height:16px}
+.mnav button:disabled{opacity:.3;cursor:default}
+@media (max-width:640px),(pointer:coarse){
+  .mwrap.over .mnav{display:flex}
+  .mwrap .meaning{scrollbar-width:none;padding-right:0}
+  .mwrap .meaning::-webkit-scrollbar{display:none}
+}
+/* pressed effect: same as the bottom bar buttons (.k:active) */
+.clr:active,.mnav button:active:not(:disabled){transform:scale(.97)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -181,7 +196,13 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
     <div class="chars" id="chars"></div>
     <button class="clr" id="clearInk" aria-label="Clear writing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H9L4 15a2 2 0 0 1 0-2.8L13.2 3a2 2 0 0 1 2.8 0l4 4a2 2 0 0 1 0 2.8L11 19"/><path d="M8 11l5 5"/></svg>Clear</button>
     <div class="sandhi" id="sandhi" hidden></div>
-    <ul class="meaning" id="meaning"></ul>
+    <div class="mwrap" id="mwrap">
+      <ul class="meaning" id="meaning"></ul>
+      <div class="mnav" aria-label="Scroll translation">
+        <button id="mUp" aria-label="Scroll translation up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button>
+        <button id="mDown" aria-label="Scroll translation down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+    </div>
     <div class="hint" id="hint"></div>
   </section>
 </main>
@@ -372,6 +393,23 @@ if ('ResizeObserver' in window) new ResizeObserver(sizeInk).observe($('card'));
 function clearInk(){ strokes = []; redrawInk(); }
 $('clearInk').onclick = e => { clearInk(); e.currentTarget.blur(); };
 
+/* ---------- translation scroll arrows ---------- */
+function updMeaningNav(){
+  const m = $('meaning'), over = m.scrollHeight - m.clientHeight > 2;
+  $('mwrap').classList.toggle('over', over);
+  $('mUp').disabled = !over || m.scrollTop <= 1;
+  $('mDown').disabled = !over || m.scrollTop >= m.scrollHeight - m.clientHeight - 1;
+}
+function scrollMeaning(dir){
+  const m = $('meaning'), step = Math.max(24, Math.round(m.clientHeight*0.6));
+  m.scrollBy({ top: dir*step, behavior: 'smooth' });
+}
+$('mUp').onclick = e => { scrollMeaning(-1); e.currentTarget.blur(); };
+$('mDown').onclick = e => { scrollMeaning(1); e.currentTarget.blur(); };
+$('meaning').addEventListener('scroll', updMeaningNav, { passive:true });
+if ('ResizeObserver' in window) new ResizeObserver(updMeaningNav).observe($('meaning'));
+document.addEventListener('touchstart', () => {}, { passive:true }); // lets :active fire on iOS Safari
+
 /* ---------- render ---------- */
 function cellSize(n){
   const avail = Math.min(window.innerWidth, 760) - 64 - (n-1)*10;
@@ -386,7 +424,7 @@ function render(keepInk = false){
   const box = $('chars'); box.innerHTML = ''; writers = []; tones = [];
   const i = idx();
   if (i === undefined){
-    $('sandhi').hidden = true; $('meaning').innerHTML = '<li>Nothing left to review.</li>'; $('meaning').classList.add('single');
+    $('sandhi').hidden = true; $('meaning').innerHTML = '<li>Nothing left to review.</li>'; $('meaning').classList.add('single'); requestAnimationFrame(updMeaningNav);
     progress(); return;
   }
   const w = W[i], size = cellSize(w.w.length);
@@ -409,6 +447,7 @@ function render(keepInk = false){
   const m = $('meaning'); m.innerHTML = ''; m.scrollTop = 0;
   m.classList.remove('single');
   parts.forEach(p => { const li = document.createElement('li'); li.textContent = p; m.append(li); });
+  requestAnimationFrame(updMeaningNav);
   // w.s = tone-sandhi notes: [dictionary syllable, its tone, spoken syllable, its tone, tone that triggers the change (0 = 1st, 2nd or 3rd)].
   // p/t keep the official dictionary tones; the note only explains how it is said (e.g. kě → ké before a 3rd tone).
   const sd = $('sandhi'); sd.innerHTML = ''; sd.hidden = !w.s;
